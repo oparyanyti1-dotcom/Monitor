@@ -37,9 +37,10 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1"
 }
 
-intents = discord.Intents.default()
+intents = discord.Intents.all() # Purane 'default' ki jagah 'all' likhein
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
+
 
 monitoring_list = {}
 
