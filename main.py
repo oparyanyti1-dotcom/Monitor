@@ -28,7 +28,7 @@ def keep_alive():
 # 2. CONFIGURATION
 # ==========================================
 # YE LINE TOKEN KO RENDER KI SETTINGS SE LEGI (SAFE HAI)
-TOKEN = os.environ.get('MTQ2NzQ2NDAzODQwNDMyOTU1NA.GAV2Pu.FIVwroH1uFGNKI3Znu85OHB9_wYM-JFn7d4RYA') 
+TOKEN = os.getenv('DISCORD_TOKEN')
 
 # You can change this to any GIF you want
 GIF_URL = "https://media.tenor.com/tC7C8f_r3iQAAAAd/anime-boy.gif"
