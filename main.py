@@ -32,7 +32,7 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 
 GIF_URL = "https://media.tenor.com/tC7C8f_r3iQAAAAd/anime-boy.gif"
 
-# Naye Headers (Anti-Block)
+# ✅ NEW: Anti-Block Headers (Bot ko Insaan dikhane ke liye)
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -54,9 +54,9 @@ def get_instagram_data(username):
     try:
         response = requests.get(url, headers=HEADERS, timeout=10)
         
-        # Agar Block Page aa jaye (Cloudflare)
+        # Agar Block Page aa jaye
         if "Just a moment" in response.text or "Attention Required" in response.text:
-            return {"status": "error", "msg": "Blocked"}
+            return {"status": "error", "msg": "Blocked by Website"}
 
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -65,14 +65,15 @@ def get_instagram_data(username):
                 followers = soup.find("span", class_="followed_by").text.strip()
                 return {"status": "active", "followers": followers, "pfp": ""}
             else:
-                return {"status": "error", "msg": "Parse Error"}
+                # Page khula par profile nahi mili (Matlab Hidden/Error)
+                return {"status": "error", "msg": "Profile Hidden/Private"}
         
         elif response.status_code == 404:
             return {"status": "banned"}
         else:
-            return {"status": "error", "msg": f"Code {response.status_code}"}
+            return {"status": "error", "msg": f"Status Code {response.status_code}"}
     except Exception as e:
-        return {"status": "error", "msg": str(e)}
+        return {"status": "error", "msg": "Connection Error"}
 
 # ==========================================
 # 4. EVENTS & COMMANDS
@@ -129,7 +130,6 @@ async def monitor_task():
             
             if check['status'] == 'active':
                 channel = bot.get_channel(data['channel_id'])
-                duration = datetime.datetime.now() - data['start_time']
                 
                 embed = discord.Embed(color=0x9b59b6)
                 embed.description = (f"**Account Unbanned** 🔓\n**{username}** ✅ | **Followers:** {check.get('followers', '0')}")
@@ -140,5 +140,6 @@ async def monitor_task():
         except: pass
 
 keep_alive()
-if TOKEN: bot.run(TOKEN)
+if TOKEN:
+    bot.run(TOKEN)
     
