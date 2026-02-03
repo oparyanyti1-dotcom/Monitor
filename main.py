@@ -1,158 +1,212 @@
-import discord
-from discord.ext import commands, tasks
-import requests
-from bs4 import BeautifulSoup
-import datetime
 import asyncio
+import time
 import os
-from flask import Flask
+import instaloader
+from pyrogram import Client, filters
 from threading import Thread
+from flask import Flask
 
-# ==========================================
-# 1. SERVER KEEP ALIVE
-# ==========================================
-app = Flask('')
+# ================= SERVER KEEPER =================
+server = Flask(__name__)
 
-@app.route('/')
+@server.route('/')
 def home():
-    return "Poke Ash Agency Bot is 24/7 Live with Proxy!"
+    return "Instagram Monitor Service: ACTIVE 🟢"
 
 def run():
-    app.run(host='0.0.0.0', port=8080)
+    server.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
 def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# ==========================================
-# 2. CONFIGURATION
-# ==========================================
-TOKEN = os.getenv('DISCORD_TOKEN')
-PROXY_KEY = os.getenv('SCRAPER_API_KEY') # Ye key Render se aayegi
+# ================= CONFIGURATION =================
 
-GIF_URL = "https://media.tenor.com/tC7C8f_r3iQAAAAd/anime-boy.gif"
+API_ID = 35920777
+API_HASH = "99b5f89a6cf2e2f820ce41c2143c82fb"
+BOT_TOKEN = "7850428090:AAE49bQPsIjK1gXkainWR0ERWDxSjWV-X_c" # BotFather wala token yahan daalein
 
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+CHECK_INTERVAL = 300 
 
-monitoring_list = {}
+monitoring_ban = {}   
+monitoring_unban = {} 
 
-# ==========================================
-# 3. PROXY SCRAPER LOGIC (Ye Block Nahi Hoga)
-# ==========================================
-def get_instagram_data(username):
-    # Hum Picuki check karenge lekin Proxy ke through
-    target_url = f"https://www.picuki.com/profile/{username}"
+app = Client("insta_monitor_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+L = instaloader.Instaloader()
+
+# --- Helper: Time Formatter ---
+def get_time_taken(seconds):
+    days = int(seconds // 86400)
+    seconds %= 86400
+    hours = int(seconds // 3600)
+    seconds %= 3600
+    minutes = int(seconds // 60)
+    seconds = int(seconds % 60)
     
-    # Agar Proxy Key nahi hai toh error do
-    if not PROXY_KEY:
-        return {"status": "error", "msg": "Proxy Key Missing in Render!"}
+    parts = []
+    if days > 0: parts.append(f"{days}d")
+    if hours > 0: parts.append(f"{hours}h")
+    if minutes > 0: parts.append(f"{minutes}m")
+    parts.append(f"{seconds}s")
+    return " ".join(parts)
 
-    # Request Proxy Server ke through bhejo
-    proxy_url = "http://api.scraperapi.com"
-    params = {
-        'api_key': PROXY_KEY,
-        'url': target_url
-    }
-
+# --- Helper: Get Instagram Data ---
+def get_insta_details(username):
     try:
-        # Proxy request (Slow ho sakta hai, 5-10 sec)
-        response = requests.get(proxy_url, params=params, timeout=60)
-        
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Data dhundo
-            try:
-                followers = soup.find("span", class_="followed_by").text.strip()
-                following = soup.find("span", class_="follows").text.strip()
-                pfp = soup.find("div", class_="profile-avatar").find("img")['src']
-                return {"status": "active", "followers": followers, "following": following, "pfp": pfp}
-            except:
-                return {"status": "error", "msg": "Profile Hidden/Loading Error"}
-                
-        elif response.status_code == 404:
-            return {"status": "banned"}
-        else:
-            return {"status": "error", "msg": f"Proxy Error: {response.status_code}"}
-            
-    except Exception as e:
-        return {"status": "error", "msg": "Connection Failed"}
+        # User-Agent simulation for better results
+        profile = instaloader.Profile.from_node(L.context, L.context.get_json(f"users/web_profile_info/?username={username}", target=username)['data']['user'])
+        return {
+            "status": "active",
+            "username": profile.username,
+            "followers": profile.followers,
+            "following": profile.followees
+        }
+    except:
+        return {"status": "banned"}
 
-# ==========================================
-# 4. EVENTS & COMMANDS
-# ==========================================
-@bot.event
-async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Instagram via Proxy"))
-    if not monitor_task.is_running():
-        monitor_task.start()
+# ================= PROFESSIONAL COMMANDS =================
 
-@bot.command()
-async def check(ctx, username: str = None):
-    if not username: return await ctx.send("Usage: `!check <username>`")
-    username = username.replace("@", "").lower().strip()
+# 1. CHECK COMMAND
+@app.on_message(filters.command("check", prefixes="!"))
+async def check_user(client, message):
+    if len(message.command) < 2:
+        await message.reply_text("✨ **Usage:** `!check [username]`")
+        return
+
+    username = message.command[1].replace("@", "")
+    status_msg = await message.reply_text(f"🔍 **Scanning Database for** @{username}...")
     
-    msg = await ctx.send(f"🔎 Checking `@{username}` via Secure Proxy... (Wait 10s)")
+    data = get_insta_details(username)
     
-    # Background mein run karo
-    data = await asyncio.to_thread(get_instagram_data, username)
-    
-    if data['status'] == 'active':
-        embed = discord.Embed(color=discord.Color.green())
-        embed.set_author(name="Poke Ash Agency", icon_url=bot.user.display_avatar.url)
-        embed.add_field(name="Username", value=f"@{username}", inline=False)
-        embed.add_field(name="Followers", value=data['followers'], inline=True)
-        embed.add_field(name="Following", value=data['following'], inline=True)
-        embed.add_field(name="Status", value="✅ **Active**", inline=False)
-        if data['pfp']: embed.set_thumbnail(url=data['pfp'])
-        await msg.edit(content=None, embed=embed)
-        
-    elif data['status'] == 'banned':
-        embed = discord.Embed(description=f"❌ **@{username}** is Banned.", color=discord.Color.red())
-        await msg.edit(content=None, embed=embed)
+    if data["status"] == "active":
+        text = (
+            f"👤 **INSTAGRAM PROFILE DATA**\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"✨ **Username:** @{data['username']}\n"
+            f"📈 **Followers:** {data['followers']:,}\n"
+            f"📉 **Following:** {data['following']:,}\n"
+            f"📊 **Status:** `Active` ✅\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"✨ **Service by:** @DisabledMM"
+        )
+        await status_msg.edit(text)
     else:
-        await msg.edit(content=f"⚠️ Error: {data.get('msg', 'Unknown Error')}")
+        await status_msg.edit(f"❌ **Alert:** @{username} is either **Banned** or the **Username is Invalid**.")
 
-@bot.command()
-async def monitor(ctx, username: str = None):
-    if not username: return await ctx.send("Usage: `!monitor <username>`")
-    username = username.replace("@", "").lower().strip()
-    
-    if username in monitoring_list: return await ctx.send("⚠️ Already monitoring!")
-    
-    # Pehla check
-    initial = await asyncio.to_thread(get_instagram_data, username)
-    if initial['status'] == 'active': return await ctx.send(f"❌ `@{username}` is already Active!")
-    
-    await ctx.send(embed=discord.Embed(description=f"🔭 Monitoring `@{username}` (Proxy Mode)", color=discord.Color.purple()))
-    monitoring_list[username] = {'channel_id': ctx.channel.id, 'user_id': ctx.author.id, 'start_time': datetime.datetime.now()}
+# 2. MONITOR BAN
+@app.on_message(filters.command("monitorban", prefixes="!"))
+async def monitor_ban(client, message):
+    if len(message.command) < 2:
+        await message.reply_text("✨ **Usage:** `!monitorban [username]`")
+        return
 
-# ==========================================
-# 5. LOOP
-# ==========================================
-@tasks.loop(minutes=2) # Proxy limit bachane ke liye time 2 min kiya hai
-async def monitor_task():
-    for username in list(monitoring_list.keys()):
-        try:
-            data = monitoring_list[username]
-            check = await asyncio.to_thread(get_instagram_data, username)
+    username = message.command[1].replace("@", "")
+    data = get_insta_details(username)
+    
+    if data["status"] == "banned":
+        await message.reply_text("⚠️ **Error:** This account is already unavailable.")
+        return
+
+    monitoring_ban[username] = message.chat.id
+    await message.reply_text(
+        f"🛡️ **Surveillance Active (Ban Mode)**\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 **Target:** @{username}\n"
+        f"⏱️ **Interval:** Every 5 Minutes\n"
+        f"📢 **Notification:** On Profile Removal\n"
+        f"━━━━━━━━━━━━━━━━━━━━"
+    )
+    asyncio.create_task(ban_checker(client, username, message.chat.id))
+
+# 3. MONITOR UNBAN
+@app.on_message(filters.command("monitorub", prefixes="!"))
+async def monitor_unban_cmd(client, message):
+    if len(message.command) < 2:
+        await message.reply_text("✨ **Usage:** `!monitorub [username]`")
+        return
+
+    username = message.command[1].replace("@", "")
+    data = get_insta_details(username)
+    
+    if data["status"] == "active":
+        await message.reply_text("✅ **Notice:** Profile is currently active.")
+        return
+
+    monitoring_unban[username] = {'chat_id': message.chat.id, 'start_time': time.time()}
+    await message.reply_text(
+        f"⏳ **Surveillance Active (Unban Mode)**\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 **Target:** @{username}\n"
+        f"⏱️ **Interval:** Every 5 Minutes\n"
+        f"📢 **Notification:** On Account Recovery\n"
+        f"━━━━━━━━━━━━━━━━━━━━"
+    )
+    asyncio.create_task(unban_checker(client, username))
+
+# 4. STOP
+@app.on_message(filters.command("stop", prefixes="!"))
+async def stop_monitor(client, message):
+    if len(message.command) < 2:
+        await message.reply_text("✨ **Usage:** `!stop [username]`")
+        return
+        
+    username = message.command[1].replace("@", "")
+    found = False
+    
+    if username in monitoring_ban:
+        del monitoring_ban[username]
+        found = True
+    if username in monitoring_unban:
+        del monitoring_unban[username]
+        found = True
+        
+    if found:
+        await message.reply_text(f"🛑 **Surveillance Terminated for** @{username}")
+    else:
+        await message.reply_text("⚠️ **Notice:** No active monitoring found for this user.")
+
+# ================= BACKGROUND LOGIC =================
+
+async def ban_checker(client, username, chat_id):
+    while username in monitoring_ban:
+        await asyncio.sleep(CHECK_INTERVAL)
+        data = get_insta_details(username)
+        if data["status"] == "banned":
+            await client.send_message(
+                chat_id, 
+                f"🚨 **URGENT NOTIFICATION**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"❌ **ACCOUNT REMOVED!**\n\n"
+                f"👤 **Target:** @{username}\n"
+                f"📊 **Status:** No longer found on Instagram.\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"✨ @DisabledMM"
+            )
+            monitoring_ban.pop(username, None)
+            break
+
+async def unban_checker(client, username):
+    while username in monitoring_unban:
+        await asyncio.sleep(CHECK_INTERVAL)
+        data = get_insta_details(username)
+        if data["status"] == "active":
+            info = monitoring_unban[username]
+            time_taken = get_time_taken(time.time() - info['start_time'])
             
-            if check['status'] == 'active':
-                channel = bot.get_channel(data['channel_id'])
-                duration = datetime.datetime.now() - data['start_time']
-                
-                embed = discord.Embed(color=0x9b59b6)
-                embed.description = (f"**Account Unbanned** 🔓\n**{username}** ✅ | **Followers:** {check.get('followers')}")
-                embed.set_image(url=GIF_URL)
-                
-                if channel: await channel.send(f"<@{data['user_id']}>", embed=embed)
-                del monitoring_list[username]
-        except: pass
+            await client.send_message(
+                info['chat_id'], 
+                f"🎉 **RECOVERY DETECTED**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"✅ **@{username} IS UNBANNED!**\n\n"
+                f"📈 **Followers:** {data['followers']:,}\n"
+                f"📉 **Following:** {data['following']:,}\n"
+                f"⏱️ **Recovery Time:** {time_taken}\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"✨ @DisabledMM"
+            )
+            monitoring_unban.pop(username, None)
+            break
 
+print("Instagram Monitoring Bot: ONLINE")
 keep_alive()
-if TOKEN:
-    bot.run(TOKEN)
-    
+app.run()
