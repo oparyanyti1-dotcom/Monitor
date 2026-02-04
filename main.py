@@ -18,7 +18,7 @@ def keep_alive(): Thread(target=run).start()
 
 API_ID = 35920777 
 API_HASH = "99b5f89a6cf2e2f820ce41c2143c82fb" 
-BOT_TOKEN = "YAHAN_BOTFATHER_TOKEN_DALO" # BotFather wala token yahan bharein
+BOT_TOKEN = "7850428090:AAE49bQPsIjK1gXkainWR0ERWDxSjWV-X_c" # BotFather wala token yahan bharein
 
 # Aapki Image se nikali gayi details
 INSTA_USER = "disabledmonitor" 
