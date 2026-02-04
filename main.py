@@ -6,33 +6,31 @@ from pyrogram import Client, filters
 from threading import Thread
 from flask import Flask
 
-# ================= SERVER KEEPER =================
+# ================= SERVER KEEPER (Render Alive) =================
 server = Flask(__name__)
 @server.route('/')
-def home(): return "Insta Monitor (Login Mode): ACTIVE 🟢"
+def home(): return "Insta Monitor Service: ONLINE 🟢"
 
 def run(): server.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 def keep_alive(): Thread(target=run).start()
 
 # ================= CONFIGURATION =================
+
 API_ID = 35920777 
 API_HASH = "99b5f89a6cf2e2f820ce41c2143c82fb" 
-BOT_TOKEN = "7850428090:AAE49bQPsIjK1gXkainWR0ERWDxSjWV-X_c"
+BOT_TOKEN = "YAHAN_BOTFATHER_TOKEN_DALO" # BotFather wala token yahan bharein
 
-# ⚠️ APNI FAKE ID KI DETAILS YAHAN DALEIN
-INSTA_USER = "disabledmonitor"
-INSTA_PASS = "Zyrexx@171212"
+# Aapki Image se nikali gayi details
+INSTA_USER = "disabledmonitor" 
+SESSION_ID = "80140188832%3AxuAndowMEdkSTh%3A13%3AAYjHT4M6C7FBMqZUPks1fwBrnl44iCtPC_TpCTeYVq"
 
-app = Client("insta_login_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+app = Client("insta_session_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 L = instaloader.Instaloader()
 
-# --- Login Function ---
-try:
-    print("Logging into Instagram...")
-    L.login(INSTA_USER, INSTA_PASS)
-    print("Login Successful!")
-except Exception as e:
-    print(f"Login Failed: {e}")
+# --- Load Session Logic ---
+print("Authenticating with Instagram Session...")
+L.context._session.cookies.set("sessionid", SESSION_ID)
+print("Session Loaded Successfully! ✅")
 
 # --- Helper: Time Formatter ---
 def get_time_taken(seconds):
@@ -56,9 +54,8 @@ def get_insta_details(username):
             "followers": profile.followers,
             "following": profile.followees
         }
-    except instaloader.exceptions.ProfileNotExistsException:
-        return {"status": "banned"}
     except Exception as e:
+        if "404" in str(e): return {"status": "banned"}
         return {"status": "error", "msg": str(e)}
 
 # ================= COMMANDS =================
@@ -72,7 +69,7 @@ async def check_user(client, message):
         await message.reply_text("✨ **Usage:** `!check [username]`")
         return
     username = message.command[1].replace("@", "")
-    status_msg = await message.reply_text(f"🔍 **Direct Scan:** @{username}...")
+    status_msg = await message.reply_text(f"🔍 **Scanning:** @{username}...")
     
     data = get_insta_details(username)
     if data["status"] == "active":
@@ -90,14 +87,14 @@ async def check_user(client, message):
     elif data["status"] == "banned":
         await status_msg.edit(f"❌ **Alert:** @{username} is **Banned** or **Invalid**.")
     else:
-        await status_msg.edit(f"⚠️ **Error:** {data.get('msg')}")
+        await status_msg.edit(f"⚠️ **Instagram Alert:** Request blocked (429). Thodi der baad try karein.")
 
 @app.on_message(filters.command("monitorban", prefixes="!"))
 async def monitor_ban_cmd(client, message):
     if len(message.command) < 2: return
     username = message.command[1].replace("@", "")
     monitoring_ban[username] = message.chat.id
-    await message.reply_text(f"🛡️ **Ban Monitor ON:** @{username}\nInterval: 5m")
+    await message.reply_text(f"🛡️ **Surveillance Active (Ban):** @{username}\nInterval: 5m")
     asyncio.create_task(ban_checker(client, username, message.chat.id))
 
 @app.on_message(filters.command("monitorub", prefixes="!"))
@@ -105,7 +102,7 @@ async def monitor_unban_cmd(client, message):
     if len(message.command) < 2: return
     username = message.command[1].replace("@", "")
     monitoring_unban[username] = {'chat_id': message.chat.id, 'start_time': time.time()}
-    await message.reply_text(f"⏳ **Unban Monitor ON:** @{username}\nInterval: 5m")
+    await message.reply_text(f"⏳ **Surveillance Active (Unban):** @{username}\nInterval: 5m")
     asyncio.create_task(unban_checker(client, username))
 
 @app.on_message(filters.command("stop", prefixes="!"))
@@ -116,7 +113,7 @@ async def stop_monitor(client, message):
     monitoring_unban.pop(username, None)
     await message.reply_text(f"🛑 **Monitoring Stopped:** @{username}")
 
-# ================= BACKGROUND TASKS =================
+# ================= BACKGROUND LOGIC =================
 
 async def ban_checker(client, username, chat_id):
     while username in monitoring_ban:
@@ -134,10 +131,10 @@ async def unban_checker(client, username):
         if data["status"] == "active":
             info = monitoring_unban[username]
             time_taken = get_time_taken(time.time() - info['start_time'])
-            await client.send_message(info['chat_id'], f"🎉 **UNBANNED DETECTED!**\n\n✅ **User:** @{username}\n⏱️ **Time:** {time_taken}\n━━━━━━━━━━━━━━━━━━━━\n✨ @DisabledMM")
+            await client.send_message(info['chat_id'], f"🎉 **RECOVERY DETECTED!**\n\n✅ **User:** @{username} is back.\n⏱️ **Time:** {time_taken}\n━━━━━━━━━━━━━━━━━━━━\n✨ @DisabledMM")
             monitoring_unban.pop(username, None)
             break
 
-print("Professional Monitor Bot Starting...")
+print("Bot is ready...")
 keep_alive()
 app.run()
